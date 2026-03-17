@@ -570,7 +570,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         public void TestErrorOccurred()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => _ = pool.ErrorOccurred);
+            Assert.False(pool.ErrorOccurred);
         }
 
         [Fact]
@@ -706,14 +706,19 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         public void TestShutdown()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Shutdown());
+            pool.Shutdown();
+            Assert.Equal(DbConnectionPoolState.ShuttingDown, pool.State);
+            Assert.False(pool.IsRunning);
         }
 
         [Fact]
         public void TestStartup()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Startup());
+            // Startup is a no-op since the pool is ready after construction.
+            // Verify it does not throw and the pool remains in Running state.
+            pool.Startup();
+            Assert.Equal(DbConnectionPoolState.Running, pool.State);
         }
 
         [Fact]
@@ -722,6 +727,83 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
             var pool = ConstructPool(SuccessfulConnectionFactory);
             Assert.Throws<NotImplementedException>(() => pool.TransactionEnded(null!, null!));
         }
+        #endregion
+
+        #region Regression tests
+
+        [Fact]
+        public void GetConnection_InfiniteTimeout_DoesNotThrowImmediately()
+        {
+            // Arrange: SqlConnection("Connect Timeout=0") means infinite timeout.
+            // Previously, TimeSpan.FromSeconds(0) == TimeSpan.Zero was passed to CancellationTokenSource,
+            // which created an immediately-cancelled token and caused instant timeout.
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            SqlConnection owningConnection = new SqlConnection(); // ConnectionTimeout defaults to 15s
+
+            // Act: get a connection with default (non-zero) timeout to ensure pool works
+            var completed = pool.TryGetConnection(
+                owningConnection,
+                taskCompletionSource: null,
+                new DbConnectionOptions("", null),
+                out DbConnectionInternal? connection
+            );
+
+            // Assert: should succeed without timeout
+            Assert.True(completed);
+            Assert.NotNull(connection);
+        }
+
+        [Fact]
+        public void ReturnInternalConnection_DeactivateThrows_SlotIsFreed()
+        {
+            // Arrange: Use a factory that creates connections whose Deactivate() throws.
+            // This simulates the slot-leak scenario where DeactivateConnection() throws and
+            // previously the slot would be permanently leaked (pool exhaustion over time).
+            var pool = ConstructPool(new ThrowOnDeactivateSqlConnectionFactory());
+            SqlConnection owningConnection = new();
+
+            // Get a connection (slot count = 1)
+            pool.TryGetConnection(
+                owningConnection,
+                taskCompletionSource: null,
+                new DbConnectionOptions("", null),
+                out DbConnectionInternal? connection
+            );
+            Assert.NotNull(connection);
+            Assert.Equal(1, pool.Count);
+
+            // Act: return the connection - Deactivate() will throw, but the slot MUST be freed
+            Assert.Throws<InvalidOperationException>(() =>
+                pool.ReturnInternalConnection(connection, owningConnection));
+
+            // Assert: the slot should be freed despite the exception, so the pool doesn't exhaust
+            Assert.Equal(0, pool.Count);
+        }
+
+        [Fact]
+        public void Shutdown_PreventsFurtherConnectionReuse()
+        {
+            // Arrange
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            SqlConnection owningConnection = new();
+
+            pool.TryGetConnection(
+                owningConnection,
+                taskCompletionSource: null,
+                new DbConnectionOptions("", null),
+                out DbConnectionInternal? connection
+            );
+            Assert.NotNull(connection);
+
+            // Act: shutdown the pool and return the connection
+            pool.Shutdown();
+            pool.ReturnInternalConnection(connection, owningConnection);
+
+            // Assert: connection should be removed (not returned to idle channel) because pool is shutting down
+            Assert.Equal(DbConnectionPoolState.ShuttingDown, pool.State);
+            Assert.Equal(0, pool.Count);
+        }
+
         #endregion
 
         #region Test classes
@@ -753,6 +835,20 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
             }
         }
 
+        internal class ThrowOnDeactivateSqlConnectionFactory : SqlConnectionFactory
+        {
+            protected override DbConnectionInternal CreateConnection(
+                DbConnectionOptions options,
+                DbConnectionPoolKey poolKey,
+                DbConnectionPoolGroupProviderInfo poolGroupProviderInfo,
+                IDbConnectionPool pool,
+                DbConnection owningConnection,
+                DbConnectionOptions userOptions)
+            {
+                return new ThrowOnDeactivateDbConnectionInternal();
+            }
+        }
+
         internal class StubDbConnectionInternal : DbConnectionInternal
         {
             #region Not Implemented Members
@@ -776,6 +872,38 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
             protected override void Deactivate()
             {
                 return;
+            }
+
+            internal override void ResetConnection()
+            {
+                return;
+            }
+            #endregion
+        }
+
+        internal class ThrowOnDeactivateDbConnectionInternal : DbConnectionInternal
+        {
+            #region Not Implemented Members
+            public override string ServerVersion => throw new NotImplementedException();
+
+            public override DbTransaction BeginTransaction(System.Data.IsolationLevel il)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override void EnlistTransaction(Transaction transaction)
+            {
+                return;
+            }
+
+            protected override void Activate(Transaction transaction)
+            {
+                return;
+            }
+
+            protected override void Deactivate()
+            {
+                throw new InvalidOperationException("Simulated deactivation failure");
             }
 
             internal override void ResetConnection()
