@@ -404,25 +404,13 @@ jobs:
           script: |
             const issueNumber = ${{ steps.gate.outputs.issue_number }};
 
-            // Post a comment that triggers Copilot to run the investigate-issue prompt.
-            // The Copilot Coding Agent watches for @copilot mentions and executes
-            // the referenced prompt file, with all .github/instructions/*.md
-            // files loaded as context automatically.
+            // Post a concise @copilot mention. Copilot automatically loads
+            // .github/instructions/*.md files as context and has access to
+            // .github/prompts/*.prompt.md files — no need to spell them out.
             const investigationRequest = [
-              `@copilot Use the \`investigate-issue\` prompt to investigate issue #${issueNumber}.`,
+              '> 🤖 *Automated triage: this issue passed the investigation gate and is being assigned to Copilot for initial analysis.*',
               '',
-              'Perform the full investigation workflow:',
-              '1. Parse the issue for environment details, error messages, and stack traces',
-              '2. Check for regression by reviewing release notes and recent PRs/commits to affected code areas',
-              '3. Identify the affected source files in `src/Microsoft.Data.SqlClient/src/`',
-              '4. Analyze the relevant code for potential root causes',
-              '5. Search for related/duplicate issues',
-              '6. Post a structured investigation comment with your findings, regression analysis, hypothesis, and recommended next steps',
-              '',
-              'Reference these instruction files for context:',
-              '- `.github/instructions/regression-analysis.instructions.md` — regression detection patterns',
-              '- `.github/instructions/issue-investigation.instructions.md` — source code map and investigation guide',
-              '- `.github/instructions/external-resources.instructions.md` — version compatibility and documentation links',
+              `@copilot Investigate issue #${issueNumber}. Use the \`investigate-issue\` prompt to perform a full investigation including regression analysis, root cause hypothesis, and recommended next steps.`,
             ].join('\n');
 
             await github.rest.issues.createComment({
