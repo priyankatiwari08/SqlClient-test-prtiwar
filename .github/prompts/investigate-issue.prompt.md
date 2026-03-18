@@ -166,10 +166,18 @@ Ensure the comment is:
   - **Size**: Based on complexity of likely fix
   - **Comment**: Brief rationale
 
-## 9. Output Summary
+## 9. PR and Branch Conventions
+
+When creating a PR with fixes:
+- **PR title**: `Fix <short description> (Fixes #${input:issue})` — always use the actual issue number, never placeholder numbers like `ISSUE-123`
+- **Branch**: `copilot/fix-<short-kebab-description>`
+- **PR body**: Include investigation summary, root cause, and what the fix changes
+- **Link**: Ensure the PR is linked to issue #${input:issue} via `Fixes #${input:issue}` in the body
+
+## 10. Output Summary
 
 Provide a summary:
-- **Issue**: #<number> — <title>
+- **Issue**: #${input:issue} — <title>
 - **Type**: Bug / Feature / Task
 - **Regression**: Yes (confirmed/likely) / No / Inconclusive
 - **Affected component**: <component name>
