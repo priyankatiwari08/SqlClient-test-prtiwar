@@ -404,20 +404,23 @@ jobs:
           script: |
             const issueNumber = ${{ steps.gate.outputs.issue_number }};
 
-            // Post a concise @copilot mention. Copilot automatically loads
-            // .github/instructions/*.md files as context and has access to
-            // .github/prompts/*.prompt.md files — no need to spell them out.
-            const investigationRequest = [
-              '> 🤖 *Automated triage: this issue passed the investigation gate and is being assigned to Copilot for initial analysis.*',
-              '',
-              `@copilot Investigate issue #${issueNumber}. Use the \`investigate-issue\` prompt to perform a full investigation including regression analysis, root cause hypothesis, and recommended next steps.`,
-            ].join('\n');
+            // Assign Copilot to the issue — this is the reliable way to trigger
+            // the Copilot Coding Agent. It automatically picks up the issue,
+            // reads .github/instructions/*.md as context, and starts working.
+            // Posting @copilot via API doesn't reliably trigger the agent.
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              assignees: ['copilot'],
+            });
 
+            // Also post a brief note so maintainers know what happened
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: investigationRequest,
+              body: '> 🤖 *Automated triage: this issue passed the investigation gate and has been assigned to Copilot for initial analysis.*',
             });
 
-            console.log(`Posted Copilot investigation request for issue #${issueNumber}`);
+            console.log(`Assigned Copilot to investigate issue #${issueNumber}`);
