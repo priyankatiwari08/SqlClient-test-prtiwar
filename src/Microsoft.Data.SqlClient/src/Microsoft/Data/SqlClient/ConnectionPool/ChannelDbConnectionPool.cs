@@ -190,31 +190,54 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
                 "<prov.DbConnectionPool.DeactivateObject|RES|CPOOL> {0}, Connection {1}, Deactivating.", 
                 Id, 
                 connection.ObjectID);
-            connection.DeactivateConnection();
 
-            if (connection.IsConnectionDoomed || 
-                !connection.CanBePooled || 
-                State == ShuttingDown)
+            // Guard against a slot leak: if DeactivateConnection or any subsequent operation throws,
+            // ensure the connection is removed from the pool so its slot is freed.
+            bool connectionReturned = false;
+            try
             {
-                RemoveConnection(connection);
+                connection.DeactivateConnection();
+
+                if (connection.IsConnectionDoomed || 
+                    !connection.CanBePooled || 
+                    State == ShuttingDown)
+                {
+                    RemoveConnection(connection);
+                }
+                else
+                {
+                    var written = _idleConnectionWriter.TryWrite(connection);
+                    Debug.Assert(written, "Failed to write returning connection to the idle channel.");
+                }
+                connectionReturned = true;
             }
-            else
+            finally
             {
-                var written = _idleConnectionWriter.TryWrite(connection);
-                Debug.Assert(written, "Failed to write returning connection to the idle channel.");
+                if (!connectionReturned)
+                {
+                    RemoveConnection(connection);
+                }
             }
         }
 
         /// <inheritdoc />
         public void Shutdown()
         {
-            throw new NotImplementedException();
+            SqlClientEventSource.Log.TryPoolerTraceEvent(
+                "<prov.DbConnectionPool.Shutdown|RES|INFO|CPOOL> {0}", Id);
+            State = ShuttingDown;
+            // Complete the writer so that any pending ReadAsync calls will throw ChannelClosedException,
+            // which is caught and converted to an informative InvalidOperationException.
+            _idleConnectionWriter.Complete();
         }
 
         /// <inheritdoc />
         public void Startup()
         {
-            throw new NotImplementedException();
+            // The pool is initialized in the constructor and is immediately ready to use.
+            // This is a no-op for ChannelDbConnectionPool.
+            SqlClientEventSource.Log.TryPoolerTraceEvent(
+                "<prov.DbConnectionPool.Startup|RES|INFO|CPOOL> {0}", Id);
         }
 
         /// <inheritdoc />
@@ -449,7 +472,12 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
             TimeSpan timeout)
         {
             DbConnectionInternal? connection = null;
-            using CancellationTokenSource cancellationTokenSource = new(timeout);
+
+            // A timeout of zero or less means infinite — do not create a CancellationTokenSource with a
+            // deadline in that case, as CancellationTokenSource(TimeSpan.Zero) fires immediately.
+            using CancellationTokenSource cancellationTokenSource = (timeout > TimeSpan.Zero)
+                ? new CancellationTokenSource(timeout)
+                : new CancellationTokenSource();
             CancellationToken cancellationToken = cancellationTokenSource.Token;
 
             // Continue looping until we create or retrieve a connection
@@ -509,24 +537,33 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
         /// <returns>The connection read from the channel.</returns>
         private DbConnectionInternal? ReadChannelSyncOverAsync(CancellationToken cancellationToken)
         {
-            // If there are no connections in the channel, then ReadAsync will block until one is available.
-            // Channels doesn't offer a sync API, so running ReadAsync synchronously on this thread may spawn
-            // additional new async work items in the managed thread pool if there are no items available in the
-            // channel. We need to ensure that we don't block all available managed threads with these child
-            // tasks or we could deadlock. Prefer to block the current user-owned thread, and limit throughput
-            // to the managed threadpool.
+            // Call ReadAsync FIRST so this caller takes a fair position in the channel's FIFO queue
+            // before acquiring the semaphore. Without this ordering, async callers that call ReadAsync
+            // later could leapfrog sync callers that are still waiting for the semaphore, violating
+            // first-come-first-served ordering.
+            var valueTask = _idleConnectionReader.ReadAsync(cancellationToken);
 
+            // Fast path: if a connection was immediately available, return without blocking.
+            if (valueTask.IsCompleted)
+            {
+                return valueTask.GetAwaiter().GetResult();
+            }
+
+            // Acquire the semaphore to limit the number of managed threads blocked synchronously.
+            // This prevents thread pool starvation when many sync callers are waiting for connections.
             _syncOverAsyncSemaphore.Wait(cancellationToken);
             try
             {
-                ConfiguredValueTaskAwaitable<DbConnectionInternal?>.ConfiguredValueTaskAwaiter awaiter =
-                    _idleConnectionReader.ReadAsync(cancellationToken).ConfigureAwait(false).GetAwaiter();
+                var awaiter = valueTask.ConfigureAwait(false).GetAwaiter();
                 using ManualResetEventSlim mres = new ManualResetEventSlim(false, 0);
 
                 // Cancellation happens through the ReadAsync call, which will complete the task.
                 // Even a failed task will complete and set the ManualResetEventSlim.
                 awaiter.UnsafeOnCompleted(() => mres.Set());
-                mres.Wait(CancellationToken.None);
+                if (!awaiter.IsCompleted)
+                {
+                    mres.Wait(CancellationToken.None);
+                }
                 return awaiter.GetResult();
             }
             finally
