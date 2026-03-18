@@ -396,31 +396,47 @@ jobs:
             core.setOutput('issue_number', issueNumber.toString());
             console.log(`Investigation gate: isBugReport=${isBugReport}, hasMinimalContent=${hasMinimalContent}, proceed=${shouldInvestigate}`);
 
-      - name: Run Copilot investigation
+      - name: Request Copilot investigation
         if: steps.gate.outputs.should_investigate == 'true'
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.USER_PAT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueNumber = ${{ steps.gate.outputs.issue_number }};
 
-            // Assign Copilot to the issue — this is the reliable way to trigger
-            // the Copilot Coding Agent. It automatically picks up the issue,
-            // reads .github/instructions/*.md as context, and starts working.
-            // Posting @copilot via API doesn't reliably trigger the agent.
-            await github.rest.issues.addAssignees({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              assignees: ['copilot'],
-            });
+            // Post a comment prompting a maintainer to assign Copilot.
+            // The Copilot Coding Agent can only be triggered by manual human
+            // action (UI assignment or manual @copilot mention) — API-based
+            // triggers are ignored by design.
+            const comment = [
+              '### 🤖 Automated Triage Complete',
+              '',
+              'This issue has passed the investigation gate (confirmed bug report with sufficient detail).',
+              '',
+              '**To start Copilot investigation**, a maintainer can:',
+              '- Click **"Assign Copilot"** in the Assignees section (sidebar) →, or',
+              '- Comment: `@copilot investigate this issue`',
+              '',
+              'Copilot will automatically use the repository\'s investigation prompts and instruction files to analyze the code, identify potential root causes, and open a draft PR with findings.',
+            ].join('\n');
 
-            // Also post a brief note so maintainers know what happened
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: '> 🤖 *Automated triage: this issue passed the investigation gate and has been assigned to Copilot for initial analysis.*',
+              body: comment,
             });
 
-            console.log(`Assigned Copilot to investigate issue #${issueNumber}`);
+            // Add a label so maintainers can filter issues ready for Copilot
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ['Ready for Copilot :robot:'],
+              });
+            } catch (e) {
+              console.log(`Note: Could not add 'Ready for Copilot' label (may not exist): ${e.message}`);
+            }
+
+            console.log(`Posted Copilot investigation prompt for issue #${issueNumber}`);
