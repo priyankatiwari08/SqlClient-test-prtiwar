@@ -178,7 +178,8 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
                                 IDbConnectionPool newPool;
                                 if (LocalAppContextSwitches.UseConnectionPoolV2)
                                 {
-                                    throw new NotImplementedException();
+                                    // ChannelDbConnectionPool is the v2 pool implementation, used when UseConnectionPoolV2 is on
+                                    newPool = new ChannelDbConnectionPool(connectionFactory, this, currentIdentity, connectionPoolProviderInfo);
                                 }
                                 else
                                 {
