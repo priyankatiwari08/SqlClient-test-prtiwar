@@ -49,19 +49,28 @@ If any required details are missing, add the label `Needs more info :information
 ## 4. Apply Labels
 Select appropriate labels based on the issue content:
 
-**Area labels** (pick the most relevant):
+**Area labels** (pick the most relevant — use exact label names below):
 - `Area\Engineering` — Build system, CI/CD, project infrastructure
 - `Area\Connection Pooling` — Pool behavior, timeouts, pool size
 - `Area\AKV Provider` — Always Encrypted Azure Key Vault provider
 - `Area\Json` — JSON data type support
-- `Area\SqlClient` — General driver behavior
-- `Area\SNI` — Network layer (managed or native)
-- `Area\TDS` — Protocol-level issues
+- `Area\Managed SNI` — Managed SNI codebase (network layer)
+- `Area\Native SNI` — Native SNI codebase (network layer)
+- `Area\Sql Bulk Copy` — SqlBulkCopy operations
+- `Area\Netcore` — Issues specific to .NET runtime / netcore folder
+- `Area\Netfx` — Issues specific to .NET Framework / netfx folder
+- `Area\Tests` — Test code / test projects
+- `Area\Documentation` — Documentation and samples
+- `Area\Azure Connectivity` — Azure connectivity issues
+- `Area\Vector` — Vector feature
+- `Area\Async` — Async operations
 
 **Status labels**:
 - `Triage Needed :new:` — For new issues needing initial review
 - `Needs more info :information_source:` — Missing required details
+- `Regression :boom:` — Regressions from earlier PRs
 - `Performance :chart_with_upwards_trend:` — Performance-related concern
+- `Repro Available :heavy_check_mark:` — Issue has repro steps provided
 
 ## 5. Update GitHub Project Fields
 Ensure the issue is added to the GitHub Project (https://github.com/orgs/dotnet/projects/588/) and set the following fields to the most appropriate values:

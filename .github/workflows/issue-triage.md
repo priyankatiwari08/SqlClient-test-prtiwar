@@ -10,24 +10,6 @@ safe-outputs:
   add-comment:
     max: 1
   add-labels:
-    allowed:
-      - "area/connection-pool"
-      - "area/encryption"
-      - "area/authentication"
-      - "area/sni"
-      - "area/tds"
-      - "area/bulk-copy"
-      - "area/mars"
-      - "area/json"
-      - "area/transactions"
-      - "area/engineering"
-      - "area/performance"
-      - "Triage Needed :new:"
-      - "needs-more-info"
-      - "possible-duplicate"
-      - "bug"
-      - "enhancement"
-      - "question"
     max: 5
   assign-to-agent:
     github-token: ${{ secrets.GH_AW_AGENT_TOKEN }}
