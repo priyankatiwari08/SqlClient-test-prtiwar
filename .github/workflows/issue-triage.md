@@ -70,17 +70,42 @@ agent to the issue so it can create a fix PR.
 Based on your analysis, take these actions:
 
 1. **Always** add `Triage Needed :new:` label
-2. **Add area labels** — pick the most relevant `area/*` label(s) based on your
-   understanding of the issue content (not keyword matching — use semantic understanding)
-3. **If bug report with missing info** — add `needs-more-info` label
-4. **If possible duplicate** — mention the related issue number(s) in your comment
+2. **Add area labels** — pick the most relevant `Area\*` label(s) based on your
+   understanding of the issue content (not keyword matching — use semantic understanding).
+   Apply labels silently — do NOT post any comment about area classification or
+   label detection. If no matching label exists, skip it — do not mention it.
+3. **If bug report with missing info** — add `Needs more info :information_source:` label
+4. **If duplicate issues found** — link them directly in the triage comment using
+   GitHub issue references (e.g., #1422). Do NOT post a separate duplicate check comment.
 5. **If confirmed bug needing code fix** — assign Copilot coding agent
-6. **Post a single triage comment** summarizing:
-   - Issue type (Bug / Feature / Task)
-   - Detected area(s) and why
-   - Whether environment details are complete
-   - Related issues found (if any)
-   - Regression assessment (if applicable)
-   - Recommended next steps
+6. **Post exactly ONE triage comment** with the following structure:
+
+### Triage comment format:
+
+```
+## 🔍 Triage Summary
+
+| Step | Status |
+|------|--------|
+| Environment validation | ✅ Complete — all required fields provided |
+| Area classification | ✅ Complete — labeled as `Area\<name>` |
+| Duplicate check | ✅ Complete — no duplicates found / linked #<number> |
+| Regression analysis | ✅ Complete — likely regression from X.Y.Z |
+| Deep investigation | ✅ Complete / ⏳ Awaiting maintainer action |
+
+### Analysis
+
+<Your detailed triage analysis here — issue type, affected component,
+root cause hypothesis, regression assessment, recommended next steps>
+```
+
+Adapt the status values based on actual results. For example:
+- If environment info is missing: `⚠️ Incomplete — missing .NET version, OS`
+- If no area label matched: `✅ Complete — no matching area label found`
+- If duplicates found: `✅ Complete — potentially related: #1422, #567`
+- If deep investigation was skipped: `⏭️ Skipped — not a code defect`
+
+Do NOT post separate comments for area labeling, duplicate checks, or environment
+validation. Everything goes in this single triage comment.
 
 If no action is needed, you MUST call the noop tool with a message explaining why.
