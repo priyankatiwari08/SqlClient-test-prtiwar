@@ -11,23 +11,23 @@ safe-outputs:
     max: 1
   add-labels:
     allowed:
-      - "Area\\Connection Pooling"
-      - "Area\\AKV Provider"
-      - "Area\\Json"
-      - "Area\\SNI"
-      - "Area\\TDS"
-      - "Area\\Engineering"
-      - "Area\\Authentication"
-      - "Area\\Encryption"
-      - "Area\\MARS"
-      - "Area\\Transactions"
-      - "Area\\BulkCopy"
-      - "Area\\SqlClient"
-      - "Performance :chart_with_upwards_trend:"
+      - "area/connection-pool"
+      - "area/encryption"
+      - "area/authentication"
+      - "area/sni"
+      - "area/tds"
+      - "area/bulk-copy"
+      - "area/mars"
+      - "area/json"
+      - "area/transactions"
+      - "area/engineering"
+      - "area/performance"
       - "Triage Needed :new:"
-      - "Needs More Info :information_source:"
-      - ":bug: Bug!"
-      - "Feature Request :bulb:"
+      - "needs-more-info"
+      - "possible-duplicate"
+      - "bug"
+      - "enhancement"
+      - "question"
     max: 5
   assign-to-agent:
     github-token: ${{ secrets.GH_AW_AGENT_TOKEN }}
@@ -45,7 +45,7 @@ Use the following validation criteria:
 
 {{#import ../prompts/validate-environment-details.prompt.md}}
 
-If critical fields are missing, add the label `Needs More Info :information_source:`
+If critical fields are missing, add the label `needs-more-info`
 and post a comment listing exactly what is missing and why it matters, using the
 template from the validation prompt above.
 
@@ -88,9 +88,9 @@ agent to the issue so it can create a fix PR.
 Based on your analysis, take these actions:
 
 1. **Always** add `Triage Needed :new:` label
-2. **Add area labels** — pick the most relevant `Area\*` label(s) based on your
+2. **Add area labels** — pick the most relevant `area/*` label(s) based on your
    understanding of the issue content (not keyword matching — use semantic understanding)
-3. **If bug report with missing info** — add `Needs More Info :information_source:` label
+3. **If bug report with missing info** — add `needs-more-info` label
 4. **If possible duplicate** — mention the related issue number(s) in your comment
 5. **If confirmed bug needing code fix** — assign Copilot coding agent
 6. **Post a single triage comment** summarizing:
