@@ -6,7 +6,7 @@ on:
 engine: copilot
 
 safe-outputs:
-  staged: true  # Preview mode — remove this line once verified
+  # staged: true  # Preview mode — uncomment this line to enable preview-only mode
   add-comment:
     max: 1
   add-labels:
