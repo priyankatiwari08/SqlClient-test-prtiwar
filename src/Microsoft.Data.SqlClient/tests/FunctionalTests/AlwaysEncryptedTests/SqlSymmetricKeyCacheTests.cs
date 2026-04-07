@@ -111,7 +111,8 @@ namespace Microsoft.Data.SqlClient.Tests.AlwaysEncryptedTests
             Exception[] threadExceptions = new Exception[ConcurrentThreadCount];
             Thread[] threads = new Thread[ConcurrentThreadCount];
 
-            var barrier = new Barrier(ConcurrentThreadCount); // synchronise all threads to start together
+            // synchronise all threads to start together; dispose after threads finish
+            using var barrier = new Barrier(ConcurrentThreadCount);
 
             for (int i = 0; i < ConcurrentThreadCount; i++)
             {
@@ -263,7 +264,7 @@ namespace Microsoft.Data.SqlClient.Tests.AlwaysEncryptedTests
                 string masterKeyPath,
                 string encryptionAlgorithm,
                 byte[] columnEncryptionKey)
-                => throw new NotSupportedException("Encryption is not used in this test.");
+                => throw new NotSupportedException("EncryptColumnEncryptionKey is not used in this test.");
         }
     }
 }
