@@ -8,7 +8,8 @@ engine: copilot
 safe-outputs:
   # staged: true  # Preview mode — uncomment this line to enable preview-only mode
   add-comment:
-    max: 1
+    max: 3
+    hide-older-comments: true
   add-labels:
     max: 5
   assign-to-agent:
@@ -21,13 +22,18 @@ You are a triage specialist for the **Microsoft.Data.SqlClient** .NET data provi
 A new issue has just been opened. Analyze it end-to-end and take appropriate actions.
 
 > **⚠️ CRITICAL RULE — READ BEFORE PROCEEDING:**
-> You MUST post **exactly ONE comment** on this issue. Do NOT call the add-comment
-> tool more than once. Do NOT post separate comments for area classification,
-> duplicate checks, environment validation, or any intermediate step.
-> Gather ALL findings silently, then post a single triage comment at the very end
-> (Step 6). The imported prompts below are reference material only — do NOT act
-> on their individual section instructions to post comments or output results.
-> Apply labels silently without commenting about them.
+>
+> **WORKFLOW**: Gather → Label → Comment (once).
+>
+> 1. **GATHER** — Read the issue, validate environment, classify area, search duplicates,
+>    check regression. Use GitHub read tools only. Do NOT call `add_comment` during this phase.
+> 2. **LABEL** — Apply area labels and status labels silently via `add_labels`. No comments.
+> 3. **COMMENT** — Call `add_comment` **exactly once** at the very end (Step 6) with
+>    the comprehensive triage summary containing ALL your findings.
+>
+> The imported prompts below are **reference data** — do NOT call `add_comment` after
+> reading them. Do NOT post separate comments for area classification, duplicate checks,
+> environment validation, or any intermediate step.
 
 ## Step 1 — Environment Validation
 
@@ -74,20 +80,16 @@ to involve a code defect, perform a deeper investigation:
 If the investigation confirms a likely code-level bug, assign Copilot coding
 agent to the issue so it can create a fix PR.
 
-## Step 6 — Final Actions
+## Step 6 — Final Actions (THIS IS THE ONLY STEP WHERE YOU CALL add_comment)
 
 Based on your analysis, take these actions:
 
 1. **Always** add `Triage Needed :new:` label
-2. **Add area labels** — pick the most relevant `Area\*` label(s) based on your
-   understanding of the issue content (not keyword matching — use semantic understanding).
-   Apply labels silently — do NOT post any comment about area classification or
-   label detection. If no matching label exists, skip it — do not mention it.
+2. **Add area labels** — pick the most relevant `Area\*` label(s) using semantic understanding.
+   Apply labels silently via `add_labels` — do NOT call `add_comment` about labels.
 3. **If bug report with missing info** — add `Needs more info :information_source:` label
-4. **If duplicate issues found** — link them directly in the triage comment using
-   GitHub issue references (e.g., #1422). Do NOT post a separate duplicate check comment.
-5. **If confirmed bug needing code fix** — assign Copilot coding agent
-6. **Post exactly ONE triage comment** with the following structure:
+4. **NOW call `add_comment` ONCE** with this format (this is the FIRST and ONLY time
+   you should call `add_comment` in this entire workflow):
 
 ### Triage comment format:
 
@@ -114,7 +116,8 @@ Adapt the status values based on actual results. For example:
 - If duplicates found: `✅ Complete — potentially related: #1422, #567`
 - If deep investigation was skipped: `⏭️ Skipped — not a code defect`
 
-Do NOT post separate comments for area labeling, duplicate checks, or environment
-validation. Everything goes in this single triage comment.
+5. **If confirmed bug needing code fix** — assign Copilot coding agent
+
+Do NOT call `add_comment` for anything other than the triage summary above.
 
 If no action is needed, you MUST call the noop tool with a message explaining why.

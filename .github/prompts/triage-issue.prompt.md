@@ -82,12 +82,7 @@ If any required details are missing, add the label `Needs more info :information
 - Key components: SqlConnection, TdsParser, ConnectionPool, SqlCommand
 - Check if the issue is platform-specific (Windows-only, Unix-only, .NET Framework-only)
 
-## 9. Summary
-Output a brief triage summary:
-- **Type**: Bug / Feature / Task / Epic
-- **Area**: Which component(s) affected
-- **Labels applied**: List of labels
-- **Project fields**: Status, Priority, Size values set
-- **Missing info**: What additional info is needed (if any)
-- **Related issues**: Links to related issues or PRs
-- **Severity assessment**: Low / Medium / High / Critical
+## 9. Summary — Internal Use Only
+Do NOT output or post the summary as a separate comment.
+Return the following fields to the calling workflow for inclusion in the single triage comment:
+- Type, Area, Labels applied, Project fields, Missing info, Related issues, Severity assessment
