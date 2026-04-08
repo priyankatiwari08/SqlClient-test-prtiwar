@@ -2931,6 +2931,7 @@ namespace Microsoft.Data.SqlClient
             // this block of type specific shortcuts uses RyuJIT jit behaviors to achieve fast implementations of the primitive types
             // RyuJIT will be able to determine at compilation time that the typeof(T)==typeof(<primitive>) options are constant
             // and be able to remove all implementations which cannot be reached. this will eliminate non-specialized code for
+            // each instantiation of the generic method.
             Type dataType = data.GetTypeFromStorageType(false);
             if (typeof(T) == typeof(int) && dataType == typeof(int))
             {
@@ -2960,6 +2961,39 @@ namespace Microsoft.Data.SqlClient
             {
                 return data.SingleAs<T>();
             }
+            // Nullable<T> fast-paths mirror the non-nullable paths above. The same repetitive
+            // typeof(T)==typeof(int?) structure is intentional: a helper method with a delegate
+            // would prevent RyuJIT from eliminating the dead branches at JIT time.
+            // When T is Nullable<U>, a SQL NULL column returns default(T) (null) instead of
+            // throwing SqlNullValueException, which is the correct behaviour for nullable types.
+            else if (typeof(T) == typeof(int?) && dataType == typeof(int))
+            {
+                return data.IsNull ? default : (T)(object)data.Int32;
+            }
+            else if (typeof(T) == typeof(byte?) && dataType == typeof(byte))
+            {
+                return data.IsNull ? default : (T)(object)data.Byte;
+            }
+            else if (typeof(T) == typeof(short?) && dataType == typeof(short))
+            {
+                return data.IsNull ? default : (T)(object)data.Int16;
+            }
+            else if (typeof(T) == typeof(long?) && dataType == typeof(long))
+            {
+                return data.IsNull ? default : (T)(object)data.Int64;
+            }
+            else if (typeof(T) == typeof(bool?) && dataType == typeof(bool))
+            {
+                return data.IsNull ? default : (T)(object)data.Boolean;
+            }
+            else if (typeof(T) == typeof(double?) && dataType == typeof(double))
+            {
+                return data.IsNull ? default : (T)(object)data.Double;
+            }
+            else if (typeof(T) == typeof(float?) && dataType == typeof(float))
+            {
+                return data.IsNull ? default : (T)(object)data.Single;
+            }
             else if (typeof(T) == typeof(Guid) && dataType == typeof(Guid))
             {
                 return (T)(object)data.Guid;
@@ -2967,6 +3001,14 @@ namespace Microsoft.Data.SqlClient
             else if (typeof(T) == typeof(decimal) && dataType == typeof(decimal))
             {
                 return (T)(object)data.Decimal;
+            }
+            else if (typeof(T) == typeof(Guid?) && dataType == typeof(Guid))
+            {
+                return data.IsNull ? default : (T)(object)data.Guid;
+            }
+            else if (typeof(T) == typeof(decimal?) && dataType == typeof(decimal))
+            {
+                return data.IsNull ? default : (T)(object)data.Decimal;
             }
             else if (typeof(T) == typeof(DateTimeOffset) && dataType == typeof(DateTimeOffset) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005 && metaData.Is2008DateTimeType)
             {
@@ -2976,6 +3018,14 @@ namespace Microsoft.Data.SqlClient
             {
                 return (T)(object)data.DateTime;
             }
+            else if (typeof(T) == typeof(DateTimeOffset?) && dataType == typeof(DateTimeOffset) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005 && metaData.Is2008DateTimeType)
+            {
+                return data.IsNull ? default : (T)(object)data.DateTimeOffset;
+            }
+            else if (typeof(T) == typeof(DateTime?) && dataType == typeof(DateTime) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005 && metaData.Is2008DateTimeType)
+            {
+                return data.IsNull ? default : (T)(object)data.DateTime;
+            }
 #if !NETFRAMEWORK
             else if (typeof(T) == typeof(DateOnly) && dataType == typeof(DateTime) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005)
             {
@@ -2984,6 +3034,14 @@ namespace Microsoft.Data.SqlClient
             else if (typeof(T) == typeof(TimeOnly) && dataType == typeof(TimeOnly) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005)
             {
                 return (T)(object)data.TimeOnly;
+            }
+            else if (typeof(T) == typeof(DateOnly?) && dataType == typeof(DateTime) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005)
+            {
+                return data.IsNull ? default : (T)(object)data.DateOnly;
+            }
+            else if (typeof(T) == typeof(TimeOnly?) && dataType == typeof(TimeOnly) && _typeSystem > SqlConnectionString.TypeSystem.SQLServer2005)
+            {
+                return data.IsNull ? default : (T)(object)data.TimeOnly;
             }
 #endif
             else if (typeof(T) == typeof(SqlVector<float>))
