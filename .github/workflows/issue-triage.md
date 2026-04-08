@@ -94,7 +94,20 @@ Proceed with all remaining triage steps regardless of missing environment detail
 ### Analysis
 
 <2-4 sentences: what the issue is about, which component is likely affected,
-severity assessment (P0-P3), and recommended next steps for maintainers>
+and severity assessment (P0-P3)>
+
+### Next Steps
+
+<Actionable items. Be specific, not vague.
+- If environment details are missing: explicitly ask the author to provide the
+  specific missing fields (e.g. "@author, please provide: .NET target framework,
+  SQL Server version, and Operating system so we can proceed with investigation.")
+- If environment is complete and this is a confirmed bug: state that assign this issue to Copilot coding agent to investigate, AND include specific
+  investigation guidance based on the analysis (e.g. "Assign to Copilot coding
+  agent to investigate SqlDataReader.GetFieldValueAsync and related async internals
+  to apply the same Nullable<T> handling logic present in the synchronous path.")
+- If duplicates were found: recommend reviewing the linked issues before proceeding.
+- If regression: note the version boundary and state that bisection is recommended.>
 ```
 
 **Finally**: If this is a confirmed code bug with complete environment info,
