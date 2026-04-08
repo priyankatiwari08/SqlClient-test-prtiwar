@@ -27,9 +27,9 @@ Use the following validation criteria:
 
 {{#import ../prompts/validate-environment-details.prompt.md}}
 
-If critical fields are missing, add the label `needs-more-info`
-and post a comment listing exactly what is missing and why it matters, using the
-template from the validation prompt above.
+If critical fields are missing, add the label `Needs more info :information_source:`.
+Note what is missing — it will be included in the single triage comment.
+Do NOT post a separate comment for missing environment details.
 
 If this is NOT a bug report (feature request, question, etc.), skip environment
 validation entirely.

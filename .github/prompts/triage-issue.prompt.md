@@ -44,7 +44,8 @@ Check whether the issue provides enough information to act on:
 - [ ] Proposed solution or API shape
 - [ ] Use case / scenario description
 
-If any required details are missing, add the label `Needs more info :information_source:` and post a comment requesting the specific missing items.
+If any required details are missing, add the label `Needs more info :information_source:`.
+Do NOT post a separate comment about missing info — this will be included in the single triage comment.
 
 ## 4. Apply Labels
 Select appropriate labels based on the issue content:
@@ -91,9 +92,8 @@ Ensure the issue is added to the GitHub Project (https://github.com/orgs/dotnet/
 
 ## 6. Search for Related Issues
 - Search for existing issues with similar keywords: `repo:dotnet/SqlClient <key terms>`
-- If duplicates or related issues exist:
-  - Link them in a comment
-  - If it's an exact duplicate, label accordingly and reference the original
+- If duplicates or related issues exist, note them for the triage summary.
+  Do NOT post a separate comment — duplicates will be linked in the single triage comment.
 - Check if there are related PRs (open or merged) that address the same area.
 
 ## 7. Identify Affected Code Area
@@ -101,13 +101,10 @@ Ensure the issue is added to the GitHub Project (https://github.com/orgs/dotnet/
 - Note the component (e.g., SqlConnection, TdsParser, ConnectionPool, SqlCommand).
 - Check if the issue is platform-specific (Windows-only, Unix-only, .NET Framework-only).
 
-## 8. Post Triage Comment
-Add a comment that includes:
-- Confirmation that the issue has been triaged
-- Issue type classification
-- Which area/component is likely affected
-- Any questions or requests for missing information
-- Links to related issues, documentation, or code references
+## 8. Gather Triage Results
+Do NOT post any comment here. Collect all findings (issue type, area, duplicates,
+missing info, code references) and return them. The calling workflow will format
+and post the single triage comment with all results.
 - GitHub Project fields that were set (Status, Priority, Size)
 - `@` mentions for relevant team members if the issue is urgent or high-impact
 
