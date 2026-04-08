@@ -39,7 +39,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
         [Fact]
         public void GetFieldValue_NullableInt_NonNullColumn_ReturnsValue()
         {
-            using TdsServer server = new NullableIntColumnTdsServer(nonNullValue: 42);
+            using TdsServer server = new NullableIntColumnTdsServer(value: 42);
             server.Start();
 
             using SqlConnection connection = new(BuildConnectionString(server).ConnectionString);
@@ -48,15 +48,15 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
             using SqlDataReader reader = command.ExecuteReader();
             Assert.True(reader.Read());
 
-            int? value = reader.GetFieldValue<int?>(0);
+            int? result = reader.GetFieldValue<int?>(0);
 
-            Assert.Equal(42, value);
+            Assert.Equal(42, result);
         }
 
         [Fact]
         public async Task GetFieldValueAsync_NullableInt_NonNullColumn_ReturnsValue()
         {
-            using TdsServer server = new NullableIntColumnTdsServer(nonNullValue: 42);
+            using TdsServer server = new NullableIntColumnTdsServer(value: 42);
             server.Start();
 
             using SqlConnection connection = new(BuildConnectionString(server).ConnectionString);
@@ -65,9 +65,9 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
             using SqlDataReader reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
 
-            int? value = await reader.GetFieldValueAsync<int?>(0);
+            int? result = await reader.GetFieldValueAsync<int?>(0);
 
-            Assert.Equal(42, value);
+            Assert.Equal(42, result);
         }
 
         // ----------------------------------------------------------------
@@ -77,7 +77,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
         [Fact]
         public void GetFieldValue_NullableInt_NullColumn_ReturnsNull()
         {
-            using TdsServer server = new NullableIntColumnTdsServer(nonNullValue: null);
+            using TdsServer server = new NullableIntColumnTdsServer(value: null);
             server.Start();
 
             using SqlConnection connection = new(BuildConnectionString(server).ConnectionString);
@@ -86,15 +86,15 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
             using SqlDataReader reader = command.ExecuteReader();
             Assert.True(reader.Read());
 
-            int? value = reader.GetFieldValue<int?>(0);
+            int? result = reader.GetFieldValue<int?>(0);
 
-            Assert.Null(value);
+            Assert.Null(result);
         }
 
         [Fact]
         public async Task GetFieldValueAsync_NullableInt_NullColumn_ReturnsNull()
         {
-            using TdsServer server = new NullableIntColumnTdsServer(nonNullValue: null);
+            using TdsServer server = new NullableIntColumnTdsServer(value: null);
             server.Start();
 
             using SqlConnection connection = new(BuildConnectionString(server).ConnectionString);
@@ -103,9 +103,9 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
             using SqlDataReader reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
 
-            int? value = await reader.GetFieldValueAsync<int?>(0);
+            int? result = await reader.GetFieldValueAsync<int?>(0);
 
-            Assert.Null(value);
+            Assert.Null(result);
         }
 
         // ----------------------------------------------------------------
@@ -118,12 +118,15 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
         /// </summary>
         private sealed class NullableIntColumnTdsServer : TdsServer
         {
+            /// <summary>Byte length for an IntN (INT) column: 4 bytes.</summary>
+            private const byte IntNLengthBytes = 4;
+
             private readonly int? _value;
 
-            public NullableIntColumnTdsServer(int? nonNullValue)
+            public NullableIntColumnTdsServer(int? value)
                 : base(new TdsServerArguments())
             {
-                _value = nonNullValue;
+                _value = value;
             }
 
             public override TDSMessageCollection OnSQLBatchRequest(ITDSServerSession session, TDSMessage message)
@@ -145,7 +148,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
                 TDSColMetadataToken metadata = new TDSColMetadataToken();
                 TDSColumnData column = new TDSColumnData();
                 column.DataType = TDSDataType.IntN;
-                column.DataTypeSpecific = (byte)4;   // length byte for IntN = 4 bytes
+                column.DataTypeSpecific = IntNLengthBytes;
                 column.Flags.IsNullable = true;
                 column.Flags.Updatable = TDSColumnDataUpdatableFlag.ReadOnly;
                 column.Flags.IsComputed = true;
