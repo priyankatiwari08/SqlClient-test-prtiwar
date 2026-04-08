@@ -152,6 +152,7 @@
     <Compile Include="SQL\SqlBulkCopyTest\CopySomeFromRowArrayAsync.cs" />
     <Compile Include="SQL\SqlBulkCopyTest\CopyVariants.cs" />
     <Compile Include="SQL\SqlBulkCopyTest\CopyWithEvent.cs" />
+    <Compile Include="SQL\SqlBulkCopyTest\ComputedTargetColumn.cs" />
     <Compile Include="SQL\SqlBulkCopyTest\CopyWithEvent1.cs" />
     <Compile Include="SQL\SqlBulkCopyTest\CopyWithEventAsync.cs" />
     <Compile Include="SQL\SqlBulkCopyTest\FireTrigger.cs" />
