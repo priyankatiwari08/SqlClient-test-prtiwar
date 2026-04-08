@@ -38,8 +38,11 @@ Read the issue body. Then do ALL of the following analysis silently
 
 **A. Classify issue type**: Bug (has environment details/repro), Feature (has proposal), Question, or Task.
 
-**B. Validate environment** (bugs only): Check for SqlClient version, .NET version,
-SQL Server version, OS, repro steps, expected vs actual behavior. Note any missing fields.
+**B. Validate environment** (bugs only): Check for these required fields:
+SqlClient version, .NET target framework, SQL Server version, OS,
+repro steps, expected vs actual behavior.
+If any are missing, list them explicitly in the triage summary (e.g. "Missing: SQL Server version, OS").
+Proceed with all remaining triage steps regardless of missing environment details.
 
 **C. Classify area**: Based on the issue content, pick the best matching area label(s) from this list:
 
@@ -83,7 +86,7 @@ SQL Server version, OS, repro steps, expected vs actual behavior. Note any missi
 | Check | Result |
 |-------|--------|
 | Issue type | <Bug / Feature / Question / Task> |
-| Environment | <✅ Complete / ⚠️ Missing: list fields> |
+| Environment | <All required environment details provided for investigation / ⚠️ Missing: list specific fields> |
 | Area | <Area label applied or "no match"> |
 | Duplicates | <None found / Potentially related: #NNN, #NNN> |
 | Regression | <Not indicated / Likely regression from vX.Y.Z / Inconclusive> |
