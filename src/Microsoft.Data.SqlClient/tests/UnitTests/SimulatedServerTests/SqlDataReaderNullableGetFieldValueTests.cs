@@ -134,7 +134,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
                 TDSSQLBatchToken batchRequest = message[0] as TDSSQLBatchToken;
                 string text = batchRequest?.Text?.ToLowerInvariant() ?? string.Empty;
 
-                if (text.Contains(SelectIntValueQuery) || text.Contains(SelectNullIntValueQuery))
+                if (text.Contains(SelectIntValueQuery, StringComparison.Ordinal) || text.Contains(SelectNullIntValueQuery, StringComparison.Ordinal))
                 {
                     return BuildIntResponse();
                 }
@@ -151,7 +151,6 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
                 column.DataTypeSpecific = IntNLengthBytes;
                 column.Flags.IsNullable = true;
                 column.Flags.Updatable = TDSColumnDataUpdatableFlag.ReadOnly;
-                column.Flags.IsComputed = true;
                 metadata.Columns.Add(column);
 
                 // Data row
