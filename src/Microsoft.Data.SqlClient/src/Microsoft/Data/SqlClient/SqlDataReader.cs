@@ -2932,8 +2932,6 @@ namespace Microsoft.Data.SqlClient
             // RyuJIT will be able to determine at compilation time that the typeof(T)==typeof(<primitive>) options are constant
             // and be able to remove all implementations which cannot be reached. this will eliminate non-specialized code for
             // each instantiation of the generic method.
-            // The Nullable<T> fast-paths below follow the same pattern intentionally – using a helper with a delegate would
-            // prevent RyuJIT from eliminating dead branches at JIT time.
             Type dataType = data.GetTypeFromStorageType(false);
             if (typeof(T) == typeof(int) && dataType == typeof(int))
             {
@@ -2963,6 +2961,11 @@ namespace Microsoft.Data.SqlClient
             {
                 return data.SingleAs<T>();
             }
+            // Nullable<T> fast-paths mirror the non-nullable paths above. The same repetitive
+            // typeof(T)==typeof(int?) structure is intentional: a helper method with a delegate
+            // would prevent RyuJIT from eliminating the dead branches at JIT time.
+            // When T is Nullable<U>, a SQL NULL column returns default(T) (null) instead of
+            // throwing SqlNullValueException, which is the correct behaviour for nullable types.
             else if (typeof(T) == typeof(int?) && dataType == typeof(int))
             {
                 return data.IsNull ? default : (T)(object)data.Int32;

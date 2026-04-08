@@ -132,9 +132,10 @@ namespace Microsoft.Data.SqlClient.UnitTests.SimulatedServerTests
             public override TDSMessageCollection OnSQLBatchRequest(ITDSServerSession session, TDSMessage message)
             {
                 TDSSQLBatchToken batchRequest = message[0] as TDSSQLBatchToken;
-                string text = batchRequest?.Text?.ToLowerInvariant() ?? string.Empty;
+                string text = batchRequest?.Text ?? string.Empty;
 
-                if (text.Contains(SelectIntValueQuery, StringComparison.Ordinal) || text.Contains(SelectNullIntValueQuery, StringComparison.Ordinal))
+                if (text.Contains(SelectIntValueQuery, StringComparison.OrdinalIgnoreCase) ||
+                    text.Contains(SelectNullIntValueQuery, StringComparison.OrdinalIgnoreCase))
                 {
                     return BuildIntResponse();
                 }
