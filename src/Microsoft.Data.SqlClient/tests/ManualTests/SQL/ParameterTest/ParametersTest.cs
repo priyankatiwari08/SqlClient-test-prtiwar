@@ -550,6 +550,13 @@ namespace Microsoft.Data.SqlClient.ManualTesting.Tests
         [InlineData("CAST(-79228162514264337593543950335 as decimal(38, 0))", "-79228162514264337593543950335")]
         [InlineData("CAST(0.0000000000000000000000000001 as decimal(38, 38))", "0.0000000000000000000000000001")]
         [InlineData("CAST(-0.0000000000000000000000000001 as decimal(38, 38))", "-0.0000000000000000000000000001")]
+        // decimal(38,18) test cases — covers the precision-loss regression reported in issue
+        [InlineData("CAST(1.123456789012345678 as decimal(38, 18))", "1.123456789012345678")]
+        [InlineData("CAST(-1.123456789012345678 as decimal(38, 18))", "-1.123456789012345678")]
+        // 9 trailing zeros → zeroCnt=9, precision=29 → ConvertToPrecScale(29, 9) → scale=9 (9 decimal places)
+        [InlineData("CAST(12345678901234567890.123456789000000000 as decimal(38, 18))", "12345678901234567890.123456789")]
+        // 18 trailing zeros → zeroCnt=18, precision=20 → ConvertToPrecScale(28, 8) → scale=8 (8 decimal places)
+        [InlineData("CAST(12345678901234567890.000000000000000000 as decimal(38, 18))", "12345678901234567890.00000000")]
         public static void SqlDecimalConvertToDecimal_TestInRange(string sqlDecimalValue, string expectedDecimalValue)
         {
             using SqlConnection cnn = new(s_connString);
@@ -570,6 +577,9 @@ namespace Microsoft.Data.SqlClient.ManualTesting.Tests
         [InlineData("CAST(7922816251426433759354395.9999 as decimal(38, 8))")]
         [InlineData("CAST(-7922816251426433759354395.9999 as decimal(38, 8))")]
         [InlineData("CAST(0.123456789012345678901234567890 as decimal(38, 36))")]
+        // decimal(38,18) values exceeding .NET decimal precision must throw OverflowException, not silently truncate
+        [InlineData("CAST(12345678901234567890.123456789012345678 as decimal(38, 18))")]
+        [InlineData("CAST(-12345678901234567890.123456789012345678 as decimal(38, 18))")]
         public static void SqlDecimalConvertToDecimal_TestOutOfRange(string sqlDecimalValue)
         {
             using SqlConnection cnn = new(s_connString);
