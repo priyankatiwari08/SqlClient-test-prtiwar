@@ -2,8 +2,18 @@
 on:
   issues:
     types: [opened]
+  roles: all
 
 engine: copilot
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+tools:
+  github:
+    min-integrity: none
 
 safe-outputs:
   add-comment:
