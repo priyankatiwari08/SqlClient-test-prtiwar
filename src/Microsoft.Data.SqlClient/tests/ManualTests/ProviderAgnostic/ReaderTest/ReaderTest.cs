@@ -504,17 +504,7 @@ namespace Microsoft.Data.SqlClient.ManualTesting.Tests
                     Assert.Null(reader.GetFieldValue<bool?>(2));
                     Assert.Null(reader.GetFieldValue<double?>(3));
 
-                    // Async GetFieldValueAsync<T?> should return null for NULL columns (not throw)
-                    await reader.CloseAsync();
-                }
-
-                using (SqlCommand cmd = con.CreateCommand())
-                {
-                    cmd.CommandText = $"SELECT IntCol, BigIntCol, BitCol, FloatCol FROM {tableName}";
-                    using SqlDataReader reader = await cmd.ExecuteReaderAsync();
-
-                    Assert.True(await reader.ReadAsync());
-
+                    // Async GetFieldValueAsync<T?> should also return null for NULL columns (not throw)
                     Assert.Null(await reader.GetFieldValueAsync<int?>(0));
                     Assert.Null(await reader.GetFieldValueAsync<long?>(1));
                     Assert.Null(await reader.GetFieldValueAsync<bool?>(2));
@@ -525,7 +515,7 @@ namespace Microsoft.Data.SqlClient.ManualTesting.Tests
             {
                 using (SqlCommand cmd = con.CreateCommand())
                 {
-                    cmd.CommandText = $"DROP TABLE {tableName}";
+                    cmd.CommandText = $"DROP TABLE IF EXISTS {tableName}";
                     await cmd.ExecuteNonQueryAsync();
                 }
             }
