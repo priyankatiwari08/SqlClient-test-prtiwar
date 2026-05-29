@@ -3137,6 +3137,15 @@ namespace Microsoft.Data.SqlClient
                     {
                         return (T)(object)data.String;
                     }
+
+                    // Handle Nullable<T> value types: return null (default(T)) when the column contains NULL.
+                    // This allows callers to use GetFieldValue<int?> / GetFieldValueAsync<int?> on nullable
+                    // columns without receiving an exception.
+                    if (data.IsNull && Nullable.GetUnderlyingType(typeof(T)) != null)
+                    {
+                        return default(T);
+                    }
+
                     // the requested type is likely to be one that isn't supported so try the cast and
                     // unless there is a null value conversion then feedback the cast exception with 
                     // type named to the user so they know what went wrong. Supported types are listed

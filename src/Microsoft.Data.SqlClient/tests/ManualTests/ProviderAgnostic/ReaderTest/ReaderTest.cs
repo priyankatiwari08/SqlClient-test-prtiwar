@@ -463,6 +463,73 @@ namespace Microsoft.Data.SqlClient.ManualTesting.Tests
                 }
             }
         }
+
+#if !NETFRAMEWORK
+        /// <summary>
+        /// Verifies that GetFieldValue&lt;T?&gt; and GetFieldValueAsync&lt;T?&gt; return null (not throw) when the column contains NULL.
+        /// Regression test for: GetFieldValueAsync&lt;int?&gt; throws InvalidCastException on NULL column.
+        /// </summary>
+        [ConditionalFact(typeof(DataTestUtility), nameof(DataTestUtility.AreConnStringsSetup), nameof(DataTestUtility.IsNotAzureSynapse))]
+        public static async Task SqlDataReader_GetFieldValueNullable_ReturnsNullForNullColumn()
+        {
+            string tableName = DataTestUtility.GetLongName("NullableGetFieldValue");
+
+            using SqlConnection con = new SqlConnection(DataTestUtility.TCPConnectionString);
+            await con.OpenAsync();
+
+            try
+            {
+                using (SqlCommand cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $"CREATE TABLE {tableName} ([IntCol] [int] NULL, [BigIntCol] [bigint] NULL, [BitCol] [bit] NULL, [FloatCol] [float] NULL)";
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                using (SqlCommand cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $"INSERT INTO {tableName} VALUES (NULL, NULL, NULL, NULL)";
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                using (SqlCommand cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $"SELECT IntCol, BigIntCol, BitCol, FloatCol FROM {tableName}";
+                    using SqlDataReader reader = await cmd.ExecuteReaderAsync();
+
+                    Assert.True(await reader.ReadAsync());
+
+                    // Sync GetFieldValue<T?> should return null for NULL columns
+                    Assert.Null(reader.GetFieldValue<int?>(0));
+                    Assert.Null(reader.GetFieldValue<long?>(1));
+                    Assert.Null(reader.GetFieldValue<bool?>(2));
+                    Assert.Null(reader.GetFieldValue<double?>(3));
+
+                    // Async GetFieldValueAsync<T?> should return null for NULL columns (not throw)
+                    await reader.CloseAsync();
+                }
+
+                using (SqlCommand cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $"SELECT IntCol, BigIntCol, BitCol, FloatCol FROM {tableName}";
+                    using SqlDataReader reader = await cmd.ExecuteReaderAsync();
+
+                    Assert.True(await reader.ReadAsync());
+
+                    Assert.Null(await reader.GetFieldValueAsync<int?>(0));
+                    Assert.Null(await reader.GetFieldValueAsync<long?>(1));
+                    Assert.Null(await reader.GetFieldValueAsync<bool?>(2));
+                    Assert.Null(await reader.GetFieldValueAsync<double?>(3));
+                }
+            }
+            finally
+            {
+                using (SqlCommand cmd = con.CreateCommand())
+                {
+                    cmd.CommandText = $"DROP TABLE {tableName}";
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+        }
 #endif
     }
 }
