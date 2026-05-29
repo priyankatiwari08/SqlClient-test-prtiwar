@@ -83,8 +83,13 @@ any work, then follow the matching flow:
    does NOT start with `/triage`. The workflow-level `if:` has already verified
    the issue currently carries the label `Auto-Triage: Waiting for Author`,
    so a prior triage flagged missing env info and the author has now responded.
-   Proceed to the triage instructions, treating later author comments as part
-   of the issue body.
+   Treat later author comments as part of the issue body and re-validate the
+   environment. **Critical:** if the environment is STILL incomplete after
+   accounting for the new comment (e.g. the author said "will share details
+   later" without actually providing them), call `noop` immediately and stop —
+   do NOT post a new comment and do NOT change the label. Only post a fresh
+   summary when the environment is now actually complete. See "Follow-up
+   early-exit" under Instructions.
 3. **On-demand triage** — `event_name == "issue_comment"` and the comment body
    starts with `/triage`. A maintainer is explicitly requesting a fresh triage.
    Ignore label state and prior summary counts; proceed to the triage
@@ -134,6 +139,30 @@ environment validation, and analysis. Do not skip this step.
 Read the issue body **and, for follow-up / on-demand runs, every subsequent
 comment**. Then do ALL of the following analysis silently (using read tools
 and search only — no comments, no outputs):
+
+### Follow-up early-exit (scenario 2 only)
+
+Before running the full analysis on a follow-up run, do a quick environment
+re-check:
+
+- Treat the issue body PLUS every comment posted by the issue author as the
+  combined source of environment information.
+- Apply the environment validation rules in step **B** below to that combined
+  source.
+- If any required environment field is STILL missing (the author’s new
+  comment did not actually supply the missing info — e.g. "okay, will share
+  details soon", a question, an unrelated remark) → call `noop` with a short
+  reason like `"Author commented but required env fields still missing"` and
+  STOP. Do NOT call `add_comment`. Do NOT call `add_labels` or `remove_labels`.
+  The label stays in place so the next author comment can re-trigger this
+  workflow.
+- Only if every required env field is now present, continue with the full
+  triage analysis below and produce a fresh summary.
+
+This early-exit does NOT apply to initial triage (scenario 1) or on-demand
+`/triage` (scenario 3) — those always produce a fresh summary.
+
+### Full analysis
 
 **A. Classify issue type**: Bug (has environment details/repro), Feature (has proposal), Question, or Task.
 
