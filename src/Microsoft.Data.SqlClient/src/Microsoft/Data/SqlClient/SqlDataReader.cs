@@ -3133,6 +3133,11 @@ namespace Microsoft.Data.SqlClient
                 }
                 else
                 {
+                    if (Nullable.GetUnderlyingType(typeof(T)) != null && data.IsNull)
+                    {
+                        return default;
+                    }
+
                     if (typeof(T) == typeof(string) && metaData.metaType.SqlDbType == SqlDbTypeExtensions.Vector)
                     {
                         return (T)(object)data.String;
