@@ -84,12 +84,16 @@ any work, then follow the matching flow:
    the issue currently carries the label `Auto-Triage: Waiting for Author`,
    so a prior triage flagged missing env info and the author has now responded.
    Treat later author comments as part of the issue body and re-validate the
-   environment. **Critical:** if the environment is STILL incomplete after
-   accounting for the new comment (e.g. the author said "will share details
-   later" without actually providing them), call `noop` immediately and stop —
-   do NOT post a new comment and do NOT change the label. Only post a fresh
-   summary when the environment is now actually complete. See "Follow-up
-   early-exit" under Instructions.
+   environment. There are three sub-cases routed by "Follow-up routing" under
+   Instructions:
+   - **No progress** (comment supplied no new env field, e.g. "will share
+     soon") → silent `noop`, label stays, no comment posted.
+   - **Partial progress** (comment supplied at least one new env field but
+     others are still missing) → post a fresh summary acknowledging what
+     was provided and re-asking for the rest, KEEP the label, do NOT assign.
+   - **Complete** (all required env fields are now present) → post a fresh
+     summary, REMOVE the label, and assign to Copilot if it is a confirmed
+     code bug.
 3. **On-demand triage** — `event_name == "issue_comment"` and the comment body
    starts with `/triage`. A maintainer is explicitly requesting a fresh triage.
    Ignore label state and prior summary counts; proceed to the triage
@@ -140,27 +144,47 @@ Read the issue body **and, for follow-up / on-demand runs, every subsequent
 comment**. Then do ALL of the following analysis silently (using read tools
 and search only — no comments, no outputs):
 
-### Follow-up early-exit (scenario 2 only)
+### Follow-up routing (scenario 2 only)
 
-Before running the full analysis on a follow-up run, do a quick environment
-re-check:
+Before running the full analysis on a follow-up run, decide which of three
+sub-cases this comment falls into. Use the rules in step **B** below to
+determine which environment fields each source supplies.
 
-- Treat the issue body PLUS every comment posted by the issue author as the
-  combined source of environment information.
-- Apply the environment validation rules in step **B** below to that combined
-  source.
-- If any required environment field is STILL missing (the author’s new
-  comment did not actually supply the missing info — e.g. "okay, will share
-  details soon", a question, an unrelated remark) → call `noop` with a short
-  reason like `"Author commented but required env fields still missing"` and
-  STOP. Do NOT call `add_comment`. Do NOT call `add_labels` or `remove_labels`.
-  The label stays in place so the next author comment can re-trigger this
-  workflow.
-- Only if every required env field is now present, continue with the full
-  triage analysis below and produce a fresh summary.
+Compute two snapshots:
 
-This early-exit does NOT apply to initial triage (scenario 1) or on-demand
-`/triage` (scenario 3) — those always produce a fresh summary.
+- **BEFORE** = env fields supplied by the issue body + every author comment
+  EXCEPT the triggering comment.
+- **AFTER**  = env fields supplied by the issue body + every author comment
+  INCLUDING the triggering comment.
+
+Then route as follows:
+
+1. **No progress** — `AFTER == BEFORE` (the new comment did not supply any
+   new env field; e.g. "okay, will share details soon", a question, an
+   unrelated remark). → Call `noop` with a short reason like `"Author
+   commented but supplied no new env info"` and STOP. Do NOT call
+   `add_comment`. Do NOT change the label. The label stays so the next
+   author comment can re-trigger this workflow.
+
+2. **Partial progress** — `AFTER` adds at least one new env field but is
+   still incomplete (some required fields are still missing). → Proceed
+   to the full analysis below and post a fresh triage summary. The
+   `Environment` row MUST acknowledge what was just provided and list
+   only the fields that are STILL missing, e.g.
+   `⚠️ Partial: received SqlClient version and OS; still missing: .NET TFM, SQL Server version`.
+   Keep the label `Auto-Triage: Waiting for Author` on the issue (i.e. call
+   `add_labels` with that label — it is a no-op if already present). Do
+   NOT call `assign_to_agent` in this sub-case.
+
+3. **Complete** — `AFTER` contains every required env field. → Proceed to
+   the full analysis below and post a fresh triage summary. The
+   `Environment` row says `All required environment details provided for
+   investigation`. Call `remove_labels` with the label. If this is a
+   confirmed code bug, also call `assign_to_agent`.
+
+This routing does NOT apply to initial triage (scenario 1) or on-demand
+`/triage` (scenario 3) — those always produce a fresh summary using the
+standard label-management rules in the Actions section below.
 
 ### Full analysis
 
@@ -211,7 +235,7 @@ runs add "(on-demand re-triage)" to the heading:
 | Check | Result |
 |-------|--------|
 | Issue type | <Bug / Feature / Question / Task> |
-| Environment | <All required environment details provided for investigation / ⚠️ Missing: list specific fields> |
+| Environment | <All required environment details provided for investigation / ⚠️ Partial: received <list>; still missing: <list> / ⚠️ Missing: list specific fields> |
 | Area | <Best matching area from classification table> |
 | Duplicates | <None found / Potentially related: #NNN, #NNN> |
 | Regression | <Not indicated / Likely regression from vX.Y.Z / Inconclusive> |
@@ -236,14 +260,20 @@ and severity assessment (P0-P3)>
 > **Note**: This triage summary is auto-generated by an AI agent. The analysis and suggestions above have not been verified by a human maintainer. Please treat as preliminary guidance only.
 ```
 
-**Then manage the label** (skip this step entirely for on-demand `/triage` runs):
+**Then manage the label**:
 
-- If the `Environment` row in the summary you just posted contains
-  `⚠️ Missing:` → call `add_labels` with `["Auto-Triage: Waiting for Author"]`.
-- Otherwise → call `remove_labels` with `["Auto-Triage: Waiting for Author"]`
-  (safe to call even if the label is not currently applied).
+- For **on-demand `/triage` runs**, do NOT touch the label — preserve
+  whatever state existed before.
+- For **initial triage** and **follow-up triage**, base the decision on the
+  `Environment` row of the summary you just posted:
+  - If it contains `⚠️ Missing:` or `⚠️ Partial:` → call `add_labels` with
+    `["Auto-Triage: Waiting for Author"]` (no-op if already present).
+  - Otherwise (env complete) → call `remove_labels` with
+    `["Auto-Triage: Waiting for Author"]` (safe to call even if absent).
 
 **Finally**: If this is a confirmed code bug with complete environment info,
-call `assign_to_agent` to assign Copilot coding agent.
+call `assign_to_agent` to assign Copilot coding agent. Do NOT call
+`assign_to_agent` for partial-progress follow-up runs (env is still
+incomplete) or for spam/no-action issues — call `noop` in those cases.
 
 If the issue is spam or no action is needed, call the `noop` tool instead.
