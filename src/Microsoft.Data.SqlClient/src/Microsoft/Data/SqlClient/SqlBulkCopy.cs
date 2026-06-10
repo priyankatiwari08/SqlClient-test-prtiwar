@@ -3164,16 +3164,117 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
             }
         }
 
+        private CancellationToken PrepareAsyncBulkCopyCancellation(TaskCompletionSource<object> source, CancellationToken cancellationToken)
+        {
+            Debug.Assert(source != null, "PrepareAsyncBulkCopyCancellation requires a completion source.");
+
+            CancellationToken effectiveToken = cancellationToken;
+            CancellationTokenSource timeoutCancellationSource = null;
+            CancellationTokenSource linkedCancellationSource = null;
+
+            if (BulkCopyTimeout > 0)
+            {
+                timeoutCancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(BulkCopyTimeout));
+                if (cancellationToken.CanBeCanceled)
+                {
+                    linkedCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCancellationSource.Token);
+                    effectiveToken = linkedCancellationSource.Token;
+                }
+                else
+                {
+                    effectiveToken = timeoutCancellationSource.Token;
+                }
+            }
+
+            if (effectiveToken.CanBeCanceled)
+            {
+                CancellationTokenRegistration registration = effectiveToken.Register(
+                    static state =>
+                    {
+                        var callbackState = (Tuple<SqlBulkCopy, TaskCompletionSource<object>, CancellationToken, CancellationTokenSource>)state;
+                        callbackState.Item1.CompleteAsyncBulkCopyOnCancellation(
+                            callbackState.Item2,
+                            callbackState.Item3,
+                            callbackState.Item4?.IsCancellationRequested == true);
+                    },
+                    Tuple.Create(this, source, cancellationToken, timeoutCancellationSource));
+
+                source.Task.ContinueWith(
+                    static (_, state) =>
+                    {
+                        var disposeState = (Tuple<CancellationTokenRegistration, CancellationTokenSource, CancellationTokenSource>)state;
+                        disposeState.Item1.Dispose();
+                        disposeState.Item2?.Dispose();
+                        disposeState.Item3?.Dispose();
+                    },
+                    Tuple.Create(registration, linkedCancellationSource, timeoutCancellationSource),
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
+            else if (timeoutCancellationSource != null)
+            {
+                source.Task.ContinueWith(
+                    static (_, state) => ((CancellationTokenSource)state).Dispose(),
+                    timeoutCancellationSource,
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
+
+            return effectiveToken;
+        }
+
+        private void CompleteAsyncBulkCopyOnCancellation(TaskCompletionSource<object> source, CancellationToken userCancellationToken, bool timedOut)
+        {
+            if (source.Task.IsCompleted)
+            {
+                return;
+            }
+
+            try
+            {
+                CleanUpStateObject();
+            }
+            catch (Exception cleanupEx)
+            {
+                Debug.Fail($"Unexpected exception during {nameof(CleanUpStateObject)} (ignored)", cleanupEx.ToString());
+            }
+
+            if (userCancellationToken.IsCancellationRequested)
+            {
+                source.TrySetCanceled(userCancellationToken);
+            }
+            else if (timedOut)
+            {
+                source.TrySetException(SQL.CR_ReconnectTimeout());
+            }
+            else
+            {
+                source.TrySetCanceled();
+            }
+        }
+
         // This returns Task for Async, Null for Sync
         private Task WriteToServerInternalAsync(CancellationToken ctoken)
         {
             TaskCompletionSource<object> source = null;
+            TaskCompletionSource<object> completion = null;
             Task<object> resultTask = null;
 
             if (_isAsyncBulkCopy)
             {
                 source = new TaskCompletionSource<object>(); // Creating the completion source/Task that we pass to application
-                resultTask = RegisterForConnectionCloseNotification(source.Task);
+                completion = new TaskCompletionSource<object>();
+
+                AsyncHelper.ContinueTaskWithState(
+                    source.Task,
+                    completion,
+                    state: completion,
+                    onSuccess: static state => ((TaskCompletionSource<object>)state).TrySetResult(null));
+
+                resultTask = RegisterForConnectionCloseNotification(completion.Task);
+                ctoken = PrepareAsyncBulkCopyCancellation(completion, ctoken);
             }
 
             if (_destinationTableName == null)
