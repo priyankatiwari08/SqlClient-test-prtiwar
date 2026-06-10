@@ -3164,6 +3164,43 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
             }
         }
 
+        private sealed class BulkCopyCancellationCallbackState
+        {
+            internal BulkCopyCancellationCallbackState(
+                SqlBulkCopy bulkCopy,
+                TaskCompletionSource<object> completion,
+                CancellationToken userCancellationToken,
+                CancellationTokenSource timeoutCancellationSource)
+            {
+                BulkCopy = bulkCopy;
+                Completion = completion;
+                UserCancellationToken = userCancellationToken;
+                TimeoutCancellationSource = timeoutCancellationSource;
+            }
+
+            internal SqlBulkCopy BulkCopy { get; }
+            internal TaskCompletionSource<object> Completion { get; }
+            internal CancellationToken UserCancellationToken { get; }
+            internal CancellationTokenSource TimeoutCancellationSource { get; }
+        }
+
+        private sealed class BulkCopyCancellationDisposeState
+        {
+            internal BulkCopyCancellationDisposeState(
+                CancellationTokenRegistration registration,
+                CancellationTokenSource linkedCancellationSource,
+                CancellationTokenSource timeoutCancellationSource)
+            {
+                Registration = registration;
+                LinkedCancellationSource = linkedCancellationSource;
+                TimeoutCancellationSource = timeoutCancellationSource;
+            }
+
+            internal CancellationTokenRegistration Registration { get; }
+            internal CancellationTokenSource LinkedCancellationSource { get; }
+            internal CancellationTokenSource TimeoutCancellationSource { get; }
+        }
+
         private CancellationToken PrepareAsyncBulkCopyCancellation(TaskCompletionSource<object> source, CancellationToken cancellationToken)
         {
             Debug.Assert(source != null, "PrepareAsyncBulkCopyCancellation requires a completion source.");
@@ -3191,23 +3228,23 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
                 CancellationTokenRegistration registration = effectiveToken.Register(
                     static state =>
                     {
-                        var callbackState = (Tuple<SqlBulkCopy, TaskCompletionSource<object>, CancellationToken, CancellationTokenSource>)state;
-                        callbackState.Item1.CompleteAsyncBulkCopyOnCancellation(
-                            callbackState.Item2,
-                            callbackState.Item3,
-                            callbackState.Item4?.IsCancellationRequested == true);
+                        var callbackState = (BulkCopyCancellationCallbackState)state;
+                        callbackState.BulkCopy.CompleteAsyncBulkCopyOnCancellation(
+                            callbackState.Completion,
+                            callbackState.UserCancellationToken,
+                            callbackState.TimeoutCancellationSource?.IsCancellationRequested == true);
                     },
-                    Tuple.Create(this, source, cancellationToken, timeoutCancellationSource));
+                    new BulkCopyCancellationCallbackState(this, source, cancellationToken, timeoutCancellationSource));
 
                 source.Task.ContinueWith(
                     static (_, state) =>
                     {
-                        var disposeState = (Tuple<CancellationTokenRegistration, CancellationTokenSource, CancellationTokenSource>)state;
-                        disposeState.Item1.Dispose();
-                        disposeState.Item2?.Dispose();
-                        disposeState.Item3?.Dispose();
+                        var disposeState = (BulkCopyCancellationDisposeState)state;
+                        disposeState.Registration.Dispose();
+                        disposeState.LinkedCancellationSource?.Dispose();
+                        disposeState.TimeoutCancellationSource?.Dispose();
                     },
-                    Tuple.Create(registration, linkedCancellationSource, timeoutCancellationSource),
+                    new BulkCopyCancellationDisposeState(registration, linkedCancellationSource, timeoutCancellationSource),
                     CancellationToken.None,
                     TaskContinuationOptions.None,
                     TaskScheduler.Default);
@@ -3247,7 +3284,7 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
             }
             else if (timedOut)
             {
-                source.TrySetException(SQL.CR_ReconnectTimeout());
+                source.TrySetException(SQL.BulkLoadTimeout());
             }
             else
             {
