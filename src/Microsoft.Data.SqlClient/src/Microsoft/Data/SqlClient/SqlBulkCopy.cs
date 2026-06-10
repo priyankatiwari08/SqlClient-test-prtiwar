@@ -3164,16 +3164,154 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
             }
         }
 
+        private sealed class BulkCopyCancellationCallbackState
+        {
+            internal BulkCopyCancellationCallbackState(
+                SqlBulkCopy bulkCopy,
+                TaskCompletionSource<object> completion,
+                CancellationToken userCancellationToken,
+                CancellationTokenSource timeoutCancellationSource)
+            {
+                BulkCopy = bulkCopy;
+                Completion = completion;
+                UserCancellationToken = userCancellationToken;
+                TimeoutCancellationSource = timeoutCancellationSource;
+            }
+
+            internal SqlBulkCopy BulkCopy { get; }
+            internal TaskCompletionSource<object> Completion { get; }
+            internal CancellationToken UserCancellationToken { get; }
+            internal CancellationTokenSource TimeoutCancellationSource { get; }
+        }
+
+        private sealed class BulkCopyCancellationDisposeState
+        {
+            internal BulkCopyCancellationDisposeState(
+                CancellationTokenRegistration registration,
+                CancellationTokenSource linkedCancellationSource,
+                CancellationTokenSource timeoutCancellationSource)
+            {
+                Registration = registration;
+                LinkedCancellationSource = linkedCancellationSource;
+                TimeoutCancellationSource = timeoutCancellationSource;
+            }
+
+            internal CancellationTokenRegistration Registration { get; }
+            internal CancellationTokenSource LinkedCancellationSource { get; }
+            internal CancellationTokenSource TimeoutCancellationSource { get; }
+        }
+
+        private CancellationToken PrepareAsyncBulkCopyCancellation(TaskCompletionSource<object> source, CancellationToken cancellationToken)
+        {
+            Debug.Assert(source != null, "PrepareAsyncBulkCopyCancellation requires a completion source.");
+
+            CancellationToken effectiveToken = cancellationToken;
+            CancellationTokenSource timeoutCancellationSource = null;
+            CancellationTokenSource linkedCancellationSource = null;
+
+            if (BulkCopyTimeout > 0)
+            {
+                timeoutCancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(BulkCopyTimeout));
+                if (cancellationToken.CanBeCanceled)
+                {
+                    linkedCancellationSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCancellationSource.Token);
+                    effectiveToken = linkedCancellationSource.Token;
+                }
+                else
+                {
+                    effectiveToken = timeoutCancellationSource.Token;
+                }
+            }
+
+            if (effectiveToken.CanBeCanceled)
+            {
+                CancellationTokenRegistration registration = effectiveToken.Register(
+                    static state =>
+                    {
+                        var callbackState = (BulkCopyCancellationCallbackState)state;
+                        callbackState.BulkCopy.CompleteAsyncBulkCopyOnCancellation(
+                            callbackState.Completion,
+                            callbackState.UserCancellationToken,
+                            callbackState.TimeoutCancellationSource?.IsCancellationRequested == true);
+                    },
+                    new BulkCopyCancellationCallbackState(this, source, cancellationToken, timeoutCancellationSource));
+
+                source.Task.ContinueWith(
+                    static (_, state) =>
+                    {
+                        var disposeState = (BulkCopyCancellationDisposeState)state;
+                        disposeState.Registration.Dispose();
+                        disposeState.LinkedCancellationSource?.Dispose();
+                        disposeState.TimeoutCancellationSource?.Dispose();
+                    },
+                    new BulkCopyCancellationDisposeState(registration, linkedCancellationSource, timeoutCancellationSource),
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
+            else if (timeoutCancellationSource != null)
+            {
+                source.Task.ContinueWith(
+                    static (_, state) => ((CancellationTokenSource)state).Dispose(),
+                    timeoutCancellationSource,
+                    CancellationToken.None,
+                    TaskContinuationOptions.None,
+                    TaskScheduler.Default);
+            }
+
+            return effectiveToken;
+        }
+
+        private void CompleteAsyncBulkCopyOnCancellation(TaskCompletionSource<object> source, CancellationToken userCancellationToken, bool timedOut)
+        {
+            if (source.Task.IsCompleted)
+            {
+                return;
+            }
+
+            try
+            {
+                CleanUpStateObject();
+            }
+            catch (Exception cleanupEx)
+            {
+                Debug.Fail($"Unexpected exception during {nameof(CleanUpStateObject)} (ignored)", cleanupEx.ToString());
+            }
+
+            if (userCancellationToken.IsCancellationRequested)
+            {
+                source.TrySetCanceled(userCancellationToken);
+            }
+            else if (timedOut)
+            {
+                source.TrySetException(SQL.BulkLoadTimeout());
+            }
+            else
+            {
+                source.TrySetCanceled();
+            }
+        }
+
         // This returns Task for Async, Null for Sync
         private Task WriteToServerInternalAsync(CancellationToken ctoken)
         {
             TaskCompletionSource<object> source = null;
+            TaskCompletionSource<object> completion = null;
             Task<object> resultTask = null;
 
             if (_isAsyncBulkCopy)
             {
                 source = new TaskCompletionSource<object>(); // Creating the completion source/Task that we pass to application
-                resultTask = RegisterForConnectionCloseNotification(source.Task);
+                completion = new TaskCompletionSource<object>();
+
+                AsyncHelper.ContinueTaskWithState(
+                    source.Task,
+                    completion,
+                    state: completion,
+                    onSuccess: static state => ((TaskCompletionSource<object>)state).TrySetResult(null));
+
+                resultTask = RegisterForConnectionCloseNotification(completion.Task);
+                ctoken = PrepareAsyncBulkCopyCancellation(completion, ctoken);
             }
 
             if (_destinationTableName == null)

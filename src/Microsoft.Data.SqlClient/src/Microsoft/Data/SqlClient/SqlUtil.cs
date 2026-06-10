@@ -1211,6 +1211,14 @@ namespace Microsoft.Data.SqlClient
             return exc;
         }
 
+        internal static SqlException BulkLoadTimeout()
+        {
+            SqlErrorCollection errors = new SqlErrorCollection();
+            errors.Add(new SqlError(TdsEnums.TIMEOUT_EXPIRED, (byte)0x00, TdsEnums.MIN_ERROR_CLASS, null, SQLMessage.Timeout(), "", 0, TdsEnums.SNI_WAIT_TIMEOUT));
+            SqlException exc = SqlException.CreateException(errors, "");
+            return exc;
+        }
+
         internal static SqlException CR_ReconnectionCancelled()
         {
             SqlErrorCollection errors = new SqlErrorCollection();
@@ -2380,4 +2388,3 @@ namespace Microsoft.Data.SqlClient
         }
     }
 }
-
