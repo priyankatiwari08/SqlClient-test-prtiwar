@@ -487,11 +487,11 @@ SELECT @@TRANCOUNT;
 DECLARE @Column_Names NVARCHAR(MAX) = NULL;
 IF EXISTS (SELECT TOP 1 * FROM sys.all_columns WHERE [object_id] = OBJECT_ID('sys.all_columns') AND [name] = 'graph_type')
 BEGIN
-    SELECT @Column_Names = COALESCE(@Column_Names + ', ', '') + QUOTENAME([name]) FROM {CatalogName}.[sys].[all_columns] WHERE [object_id] = OBJECT_ID('{escapedObjectName}') AND COALESCE([graph_type], 0) NOT IN (1, 3, 4, 6, 7) ORDER BY [column_id] ASC;
+    SELECT @Column_Names = COALESCE(@Column_Names + ', ', '') + QUOTENAME([name]) FROM {CatalogName}.[sys].[all_columns] WHERE [object_id] = OBJECT_ID('{escapedObjectName}') AND COALESCE([graph_type], 0) NOT IN (1, 3, 4, 6, 7) AND [is_computed] = 0 ORDER BY [column_id] ASC;
 END
 ELSE
 BEGIN
-    SELECT @Column_Names = COALESCE(@Column_Names + ', ', '') + QUOTENAME([name]) FROM {CatalogName}.[sys].[all_columns] WHERE [object_id] = OBJECT_ID('{escapedObjectName}') ORDER BY [column_id] ASC;
+    SELECT @Column_Names = COALESCE(@Column_Names + ', ', '') + QUOTENAME([name]) FROM {CatalogName}.[sys].[all_columns] WHERE [object_id] = OBJECT_ID('{escapedObjectName}') AND [is_computed] = 0 ORDER BY [column_id] ASC;
 END
 
 SELECT @Column_Names = COALESCE(@Column_Names, '*');
@@ -647,10 +647,11 @@ EXEC {CatalogName}..{TableCollationsStoredProc} N'{SchemaName}.{TableName}';
                     // Check for column types that we refuse to bulk load, even
                     // though we found a match.
                     //
-                    // We will not process timestamp or identity columns.
+                    // We will not process timestamp, identity, or computed columns.
                     //
                     if (metadata.type == SqlDbType.Timestamp
-                        || (metadata.IsIdentity && !IsCopyOption(SqlBulkCopyOptions.KeepIdentity)))
+                        || (metadata.IsIdentity && !IsCopyOption(SqlBulkCopyOptions.KeepIdentity))
+                        || metadata.IsExpression)
                     {
                         rejected = true;
                         break;
