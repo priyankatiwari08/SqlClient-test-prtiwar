@@ -21,6 +21,61 @@ public sealed class SqlBufferTest
     private readonly SqlBuffer _target = new();
 
     /// <summary>
+    /// Verifies that SetToDateTimeOffset correctly parses the UTC offset from TDS bytes for scales 0-2
+    /// (where the time component uses 3 bytes, and the total data length is 8 bytes).
+    /// Regression test for: SqlDataReader.GetFieldValue&lt;DateTimeOffset&gt;() returns wrong offset
+    /// for datetimeoffset(0) through datetimeoffset(2).
+    /// </summary>
+    [Theory]
+    // scale 0: '2024-01-15 10:30:00 +05:30', UTC = '2024-01-15 05:00:00'
+    // time = 18000 s at scale 0 → [0x50, 0x46, 0x00], date = day 738899 → [0x53, 0x46, 0x0B], offset +330 → [0x4A, 0x01]
+    [InlineData(0, new byte[] { 0x50, 0x46, 0x00, 0x53, 0x46, 0x0B, 0x4A, 0x01 }, 2024, 1, 15, 10, 30, 0, 0, 5, 30)]
+    // scale 1: '2024-01-15 10:30:00.0 +05:30', UTC = '2024-01-15 05:00:00.0'
+    // time = 180000 × 0.1s at scale 1 → [0x20, 0xBF, 0x02], date = day 738899 → [0x53, 0x46, 0x0B], offset +330 → [0x4A, 0x01]
+    [InlineData(1, new byte[] { 0x20, 0xBF, 0x02, 0x53, 0x46, 0x0B, 0x4A, 0x01 }, 2024, 1, 15, 10, 30, 0, 0, 5, 30)]
+    // scale 2: '2024-01-15 10:30:00.00 +05:30', UTC = '2024-01-15 05:00:00.00'
+    // time = 1800000 × 0.01s at scale 2 → [0x40, 0x77, 0x1B], date = day 738899 → [0x53, 0x46, 0x0B], offset +330 → [0x4A, 0x01]
+    [InlineData(2, new byte[] { 0x40, 0x77, 0x1B, 0x53, 0x46, 0x0B, 0x4A, 0x01 }, 2024, 1, 15, 10, 30, 0, 0, 5, 30)]
+    // scale 0, negative offset: '2024-01-15 04:30:00 -05:30' UTC = '2024-01-15 10:00:00'
+    // time = 36000 s at scale 0 → [0xA0, 0x8C, 0x00], date = day 738899 → [0x53, 0x46, 0x0B], offset -330 → [0xB6, 0xFE]
+    [InlineData(0, new byte[] { 0xA0, 0x8C, 0x00, 0x53, 0x46, 0x0B, 0xB6, 0xFE }, 2024, 1, 15, 4, 30, 0, 0, -5, -30)]
+    public void SetToDateTimeOffset_SmallScale_ReturnsCorrectOffset(
+        byte scale, byte[] bytes, int year, int month, int day, int hour, int minute, int second, int ms,
+        int offsetHours, int offsetMinutes)
+    {
+        var expectedOffset = new TimeSpan(offsetHours, offsetMinutes, 0);
+        var expected = new DateTimeOffset(year, month, day, hour, minute, second, ms, expectedOffset);
+
+        _target.SetToDateTimeOffset(bytes, scale, scale);
+
+        DateTimeOffset actual = _target.DateTimeOffset;
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedOffset, actual.Offset);
+    }
+
+    /// <summary>
+    /// Verifies that SetToDateTimeOffset correctly parses the UTC offset from TDS bytes for scales 5-7
+    /// (where the time component uses 5 bytes, and the total data length is 10 bytes).
+    /// </summary>
+    [Theory]
+    // scale 7: '2024-01-15 10:30:00.0000000 +05:30', UTC = '2024-01-15 05:00:00.0000000'
+    // time = 180000000000 × 100ns at scale 7 → [0x00, 0xB8, 0x24, 0xA3, 0x00], date = day 738899 → [0x53, 0x46, 0x0B], offset +330 → [0x4A, 0x01]
+    [InlineData(7, new byte[] { 0x00, 0xB8, 0x24, 0xA3, 0x00, 0x53, 0x46, 0x0B, 0x4A, 0x01 }, 2024, 1, 15, 10, 30, 0, 0, 5, 30)]
+    public void SetToDateTimeOffset_LargeScale_ReturnsCorrectOffset(
+        byte scale, byte[] bytes, int year, int month, int day, int hour, int minute, int second, int ms,
+        int offsetHours, int offsetMinutes)
+    {
+        var expectedOffset = new TimeSpan(offsetHours, offsetMinutes, 0);
+        var expected = new DateTimeOffset(year, month, day, hour, minute, second, ms, expectedOffset);
+
+        _target.SetToDateTimeOffset(bytes, scale, scale);
+
+        DateTimeOffset actual = _target.DateTimeOffset;
+        Assert.Equal(expected, actual);
+        Assert.Equal(expectedOffset, actual.Offset);
+    }
+
+    /// <summary>
     /// Verifies that if a SqlBuffer is directly assigned the value of SqlGuid.Null, accessing its Guid property
     /// throws a SqlNullValueException.
     /// </summary>
