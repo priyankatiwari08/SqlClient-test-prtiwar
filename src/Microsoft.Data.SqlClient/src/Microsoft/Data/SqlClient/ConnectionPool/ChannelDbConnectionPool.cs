@@ -121,7 +121,7 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
         public int Count => _connectionSlots.ReservationCount;
 
         /// <inheritdoc />
-        public bool ErrorOccurred => throw new NotImplementedException();
+        public bool ErrorOccurred => false;
 
         /// <inheritdoc />
         public int Id => _instanceId;
@@ -190,7 +190,16 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
                 "<prov.DbConnectionPool.DeactivateObject|RES|CPOOL> {0}, Connection {1}, Deactivating.", 
                 Id, 
                 connection.ObjectID);
-            connection.DeactivateConnection();
+
+            try
+            {
+                connection.DeactivateConnection();
+            }
+            catch
+            {
+                RemoveConnection(connection);
+                throw;
+            }
 
             if (connection.IsConnectionDoomed || 
                 !connection.CanBePooled || 
@@ -208,13 +217,17 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
         /// <inheritdoc />
         public void Shutdown()
         {
-            throw new NotImplementedException();
+            State = ShuttingDown;
+            _idleConnectionWriter.Complete();
         }
 
         /// <inheritdoc />
         public void Startup()
         {
-            throw new NotImplementedException();
+            // No-op: unlike WaitHandleDbConnectionPool which uses background timers and semaphores
+            // that require explicit initialization, ChannelDbConnectionPool is ready to use
+            // immediately upon construction (the channel and connection slots are initialized in the
+            // constructor).
         }
 
         /// <inheritdoc />
@@ -449,7 +462,12 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
             TimeSpan timeout)
         {
             DbConnectionInternal? connection = null;
-            using CancellationTokenSource cancellationTokenSource = new(timeout);
+            // A timeout of TimeSpan.Zero means infinite wait (ConnectionTimeout=0 in ADO.NET).
+            // CancellationTokenSource(TimeSpan.Zero) would cancel immediately, so we use a
+            // non-deadline CTS for the infinite-wait case.
+            using CancellationTokenSource cancellationTokenSource = timeout == TimeSpan.Zero
+                ? new CancellationTokenSource()
+                : new CancellationTokenSource(timeout);
             CancellationToken cancellationToken = cancellationTokenSource.Token;
 
             // Continue looping until we create or retrieve a connection
@@ -516,11 +534,20 @@ namespace Microsoft.Data.SqlClient.ConnectionPool
             // tasks or we could deadlock. Prefer to block the current user-owned thread, and limit throughput
             // to the managed threadpool.
 
+            // Call ReadAsync BEFORE acquiring the semaphore to preserve FIFO ordering.
+            // Acquiring the semaphore first would mean order is determined by semaphore acquisition
+            // rather than by the order in which callers enqueued their ReadAsync waiter on the channel.
+            ConfiguredValueTaskAwaitable<DbConnectionInternal?>.ConfiguredValueTaskAwaiter awaiter =
+                _idleConnectionReader.ReadAsync(cancellationToken).ConfigureAwait(false).GetAwaiter();
+
+            if (awaiter.IsCompleted)
+            {
+                return awaiter.GetResult();
+            }
+
             _syncOverAsyncSemaphore.Wait(cancellationToken);
             try
             {
-                ConfiguredValueTaskAwaitable<DbConnectionInternal?>.ConfiguredValueTaskAwaiter awaiter =
-                    _idleConnectionReader.ReadAsync(cancellationToken).ConfigureAwait(false).GetAwaiter();
                 using ManualResetEventSlim mres = new ManualResetEventSlim(false, 0);
 
                 // Cancellation happens through the ReadAsync call, which will complete the task.

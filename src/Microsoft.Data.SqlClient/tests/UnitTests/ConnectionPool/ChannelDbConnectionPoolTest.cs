@@ -570,7 +570,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         public void TestErrorOccurred()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => _ = pool.ErrorOccurred);
+            Assert.False(pool.ErrorOccurred);
         }
 
         [Fact]
@@ -677,6 +677,23 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
             Assert.Equal(poolGroupOptions.UseLoadBalancing, pool.UseLoadBalancing);
         }
 
+        [Fact]
+        public void TestShutdown()
+        {
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            pool.Shutdown();
+            Assert.Equal(DbConnectionPoolState.ShuttingDown, pool.State);
+        }
+
+        [Fact]
+        public void TestStartup()
+        {
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            // Startup is a no-op; the pool is already running after construction.
+            pool.Startup();
+            Assert.Equal(DbConnectionPoolState.Running, pool.State);
+        }
+
         #endregion
 
         #region Not Implemented Method Tests
@@ -700,20 +717,6 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
             Assert.Throws<NotImplementedException>(() => pool.ReplaceConnection(null!, null!, null!));
-        }
-
-        [Fact]
-        public void TestShutdown()
-        {
-            var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Shutdown());
-        }
-
-        [Fact]
-        public void TestStartup()
-        {
-            var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Startup());
         }
 
         [Fact]
