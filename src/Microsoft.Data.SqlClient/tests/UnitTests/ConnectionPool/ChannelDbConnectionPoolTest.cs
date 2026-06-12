@@ -20,6 +20,7 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
     {
         private static readonly SqlConnectionFactory SuccessfulConnectionFactory = new SuccessfulSqlConnectionFactory();
         private static readonly SqlConnectionFactory TimeoutConnectionFactory = new TimeoutSqlConnectionFactory();
+        private static readonly SqlConnectionFactory ThrowingDeactivateConnectionFactory = new ThrowingDeactivateSqlConnectionFactory();
 
         private ChannelDbConnectionPool ConstructPool(SqlConnectionFactory connectionFactory,
             DbConnectionPoolIdentity? identity = null,
@@ -281,7 +282,6 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/SqlClient/issues/3730")]
         public async Task GetConnectionMaxPoolSize_ShouldRespectOrderOfRequest()
         {
             // Arrange
@@ -350,7 +350,6 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         }
 
         [Fact]
-        [ActiveIssue("https://github.com/dotnet/SqlClient/issues/3730")]
         public async Task GetConnectionAsyncMaxPoolSize_ShouldRespectOrderOfRequest()
         {
             // Arrange
@@ -706,14 +705,19 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
         public void TestShutdown()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Shutdown());
+            // Shutdown should succeed without throwing
+            pool.Shutdown();
+            Assert.Equal(DbConnectionPoolState.ShuttingDown, pool.State);
+            Assert.False(pool.IsRunning);
         }
 
         [Fact]
         public void TestStartup()
         {
             var pool = ConstructPool(SuccessfulConnectionFactory);
-            Assert.Throws<NotImplementedException>(() => pool.Startup());
+            // Startup is a no-op for ChannelDbConnectionPool; it should not throw
+            pool.Startup();
+            Assert.Equal(DbConnectionPoolState.Running, pool.State);
         }
 
         [Fact]
@@ -783,6 +787,43 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
                 return;
             }
             #endregion
+        }
+
+        internal class ThrowingDeactivateSqlConnectionFactory : SqlConnectionFactory
+        {
+            protected override DbConnectionInternal CreateConnection(
+                DbConnectionOptions options,
+                DbConnectionPoolKey poolKey,
+                DbConnectionPoolGroupProviderInfo poolGroupProviderInfo,
+                IDbConnectionPool pool,
+                DbConnection owningConnection,
+                DbConnectionOptions userOptions)
+            {
+                return new ThrowingDeactivateDbConnectionInternal();
+            }
+        }
+
+        /// <summary>
+        /// A stub DbConnectionInternal whose Deactivate() throws, used to verify the
+        /// slot-leak fix in ReturnInternalConnection.
+        /// </summary>
+        internal class ThrowingDeactivateDbConnectionInternal : DbConnectionInternal
+        {
+            public override string ServerVersion => throw new NotImplementedException();
+
+            public override DbTransaction BeginTransaction(System.Data.IsolationLevel il) =>
+                throw new NotImplementedException();
+
+            public override void EnlistTransaction(Transaction transaction) { }
+
+            protected override void Activate(Transaction transaction) { }
+
+            protected override void Deactivate()
+            {
+                throw new InvalidOperationException("Simulated failure in Deactivate.");
+            }
+
+            internal override void ResetConnection() { }
         }
         #endregion
 
@@ -911,6 +952,97 @@ namespace Microsoft.Data.SqlClient.UnitTests.ConnectionPool
 
             Assert.NotNull(pool2);
             Assert.Equal(0, pool2.Count);
+        }
+
+        [Fact]
+        public void GetConnection_WithInfiniteTimeout_ShouldNotImmediatelyTimeout()
+        {
+            // Arrange: SqlConnection("Timeout=0") means infinite timeout.
+            // The pool should NOT immediately throw a timeout exception when Timeout=0.
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            var owningConnection = new SqlConnection("Timeout=0");
+
+            // Act & Assert: getting a connection with infinite timeout should succeed
+            var completed = pool.TryGetConnection(
+                owningConnection,
+                taskCompletionSource: null,
+                new DbConnectionOptions("", null),
+                out DbConnectionInternal? internalConnection
+            );
+
+            Assert.True(completed);
+            Assert.NotNull(internalConnection);
+        }
+
+        [Fact]
+        public async Task GetConnectionAsync_WithInfiniteTimeout_ShouldNotImmediatelyTimeout()
+        {
+            // Arrange: SqlConnection("Timeout=0") means infinite timeout.
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            var owningConnection = new SqlConnection("Timeout=0");
+            var tcs = new TaskCompletionSource<DbConnectionInternal>();
+
+            // Act
+            pool.TryGetConnection(
+                owningConnection,
+                tcs,
+                new DbConnectionOptions("", null),
+                out _
+            );
+
+            // Assert: should succeed without timing out
+            var connection = await tcs.Task;
+            Assert.NotNull(connection);
+        }
+
+        [Fact]
+        public void ReturnInternalConnection_WhenDeactivateThrows_ShouldNotLeakSlot()
+        {
+            // Arrange: pool with max 1 connection; factory returns connections whose Deactivate() throws.
+            // This simulates the slot-leak scenario: if the fix is absent, the slot stays reserved
+            // forever and no further connections can be obtained.
+            var pool = ConstructPool(ThrowingDeactivateConnectionFactory, poolGroupOptions: new DbConnectionPoolGroupOptions(
+                poolByIdentity: false,
+                minPoolSize: 0,
+                maxPoolSize: 1,
+                creationTimeout: 1,
+                loadBalanceTimeout: 0,
+                hasTransactionAffinity: true
+            ));
+
+            SqlConnection owningObject = new SqlConnection();
+            pool.TryGetConnection(owningObject, null, new DbConnectionOptions("", null), out var internalConnection);
+            Assert.NotNull(internalConnection);
+            Assert.Equal(1, pool.Count);
+
+            // Act: return the connection; Deactivate() will throw
+            Assert.Throws<InvalidOperationException>(() =>
+                pool.ReturnInternalConnection(internalConnection!, owningObject));
+
+            // Assert: with the slot-leak fix, the slot is freed after the exception
+            Assert.Equal(0, pool.Count);
+
+            // And a new connection can be obtained without timeout
+            var result = pool.TryGetConnection(
+                new SqlConnection("Timeout=1"),
+                null,
+                new DbConnectionOptions("", null),
+                out var newConnection
+            );
+            Assert.True(result);
+            Assert.NotNull(newConnection);
+        }
+
+        [Fact]
+        public void Shutdown_PreventsNewConnections()
+        {
+            // Arrange
+            var pool = ConstructPool(SuccessfulConnectionFactory);
+            pool.Shutdown();
+
+            // After shutdown, the pool state should be ShuttingDown
+            Assert.Equal(DbConnectionPoolState.ShuttingDown, pool.State);
+            Assert.False(pool.IsRunning);
         }
     }
 }
